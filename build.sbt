@@ -11,7 +11,7 @@ val kafkaVersion  = "3.2.3"
 val hbaseVersion  = "2.4.18"
 val zioVersion    = "2.1.16"
 val tapirVersion  = "1.11.40"
-val tyrianVersion = "0.13.0"
+val tyrianVersion = "0.14.0"
 
 // Shared assembly settings for all JVM fat-JAR modules.
 // Stable jar name (no version suffix) keeps Dockerfile COPY paths fixed.
@@ -26,7 +26,7 @@ val assemblySettings = Seq(
   }
 )
 
-// ---- ingestion (Java 11) ----------------------------------------------------
+// ── Part 1 — ingestion (Java 11) ─────────────────────────────────────────────
 lazy val ingestion = project
   .in(file("ingestion"))
   .settings(
@@ -42,7 +42,7 @@ lazy val ingestion = project
   )
   .settings(assemblySettings*)
 
-// ---- streaming (Scala 2.12 + Spark 3.1.2) -----------------------------------
+// ── Part 2/3/5 — streaming (Scala 2.12 + Spark 3.1.2) ───────────────────────
 lazy val streaming = project
   .in(file("streaming"))
   .settings(
@@ -59,11 +59,13 @@ lazy val streaming = project
   )
   .settings(assemblySettings*)
 
-// ---- visualization/common (crossProject Scala 3) ----------------------------
-lazy val common = crossProject(JVMPlatform, JSPlatform)
+// ── Part 4 — visualization ────────────────────────────────────────────────────
+
+lazy val vizCommon = crossProject(JVMPlatform, JSPlatform)
   .crossType(CrossType.Pure)
   .in(file("visualization/common"))
   .settings(
+    name         := "viz-common",
     scalaVersion := scala3,
     libraryDependencies ++= Seq(
       "dev.zio"                     %%% "zio-json"       % "0.7.36",
@@ -71,15 +73,14 @@ lazy val common = crossProject(JVMPlatform, JSPlatform)
       "com.softwaremill.sttp.tapir" %%% "tapir-json-zio" % tapirVersion
     )
   )
-lazy val commonJVM = common.jvm
-lazy val commonJS  = common.js
+lazy val vizCommonJVM = vizCommon.jvm
+lazy val vizCommonJS  = vizCommon.js
 
-// ---- visualization/backend (Scala 3, ZIO + Tapir + HBase reader) ------------
-lazy val backend = project
+lazy val vizBackend = project
   .in(file("visualization/backend"))
-  .dependsOn(commonJVM)
+  .dependsOn(vizCommonJVM)
   .settings(
-    name         := "backend",
+    name         := "viz-backend",
     scalaVersion := scala3,
     Compile / mainClass := Some("com.bigdata2026.backend.Main"),
     libraryDependencies ++= Seq(
@@ -92,27 +93,27 @@ lazy val backend = project
   )
   .settings(assemblySettings*)
 
-// ---- visualization/frontend (Scala.js + Tyrian) -----------------------------
-lazy val frontend = project
+lazy val vizFrontend = project
   .in(file("visualization/frontend"))
   .enablePlugins(ScalaJSPlugin)
-  .dependsOn(commonJS)
+  .dependsOn(vizCommonJS)
   .settings(
-    name         := "frontend",
+    name         := "viz-frontend",
     scalaVersion := scala3,
     scalaJSUseMainModuleInitializer := true,
     Compile / mainClass := Some("com.bigdata2026.frontend.Main"),
     scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.ESModule)),
     libraryDependencies ++= Seq(
-      "io.indigoengine"               %%% "tyrian-io" % tyrianVersion,
-      "com.softwaremill.sttp.client4" %%% "core"      % "4.0.0"
+      "io.indigoengine"               %%% "tyrian-zio"       % tyrianVersion,
+      "dev.zio"                       %%% "zio-interop-cats" % "23.1.0.3",
+      "com.softwaremill.sttp.client4" %%% "zio"              % "4.0.0"
     )
   )
 
-// ---- root aggregator --------------------------------------------------------
+// ── Root aggregator ───────────────────────────────────────────────────────────
 lazy val root = project
   .in(file("."))
-  .aggregate(ingestion, streaming, commonJVM, commonJS, backend, frontend)
+  .aggregate(ingestion, streaming, vizCommonJVM, vizCommonJS, vizBackend, vizFrontend)
   .settings(
     name           := "bigdata2026-final",
     publish / skip := true

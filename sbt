@@ -3,7 +3,7 @@
 # Downloads sbt-launch.jar once, caches it next to this script.
 set -euo pipefail
 
-SBT_VERSION="1.10.7"
+SBT_VERSION="1.12.10"
 URL="https://repo1.maven.org/maven2/org/scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch-${SBT_VERSION}.jar"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 JAR="$DIR/.sbt-launch-${SBT_VERSION}.jar"
