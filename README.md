@@ -3,14 +3,17 @@
 ## Requirements
 - JDK 11+
 - Docker
+- sbt *(recommended)* — `brew install sbt` → https://formulae.brew.sh/formula/sbt
+
+> If sbt is not installed globally, use `./sbt` instead (self-bootstrapping wrapper — downloads the launcher on first run).
 
 ## Run locally (sbt)
 
 ```bash
-./sbt ingestion/run
-./sbt streaming/run
-./sbt vizBackend/run
-./sbt vizFrontend/fastLinkJS
+sbt ingestion/run
+sbt streaming/run
+sbt vizBackend/run
+sbt vizFrontend/fastLinkJS
 ```
 
 ## Build & deploy (Docker)
