@@ -48,8 +48,9 @@ lazy val ingestion = project
     javacOptions ++= Seq("--release", "11"),
     Compile / mainClass := Some("com.bigdata2026.ingestion.Main"),
     libraryDependencies ++= Seq(
-      "org.apache.kafka" % "kafka-clients" % kafkaVersion,
-      "org.slf4j"        % "slf4j-simple"  % "2.0.9"
+      "org.apache.kafka"    %  "kafka-clients"    % kafkaVersion,
+      "org.slf4j"           %  "slf4j-simple"     % "2.0.9",
+      "com.fasterxml.jackson.core" % "jackson-databind" % "2.15.2"
     )
   )
   .settings(assemblySettings *)
