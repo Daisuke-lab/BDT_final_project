@@ -1,5 +1,6 @@
 package com.bigdata2026.streaming
 
+import com.bigdata2026.schema.GitHubEventSchema
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.Trigger
@@ -9,7 +10,7 @@ object Main {
   def main(args: Array[String]): Unit = {
 
     val broker = sys.env.getOrElse("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
-    val topic  = sys.env.getOrElse("KAFKA_TOPIC", "github-events")
+    val topic  = sys.env.getOrElse("KAFKA_TOPIC", GitHubEventSchema.TOPIC)
 
     // SparkSession is the single entry point to all Spark functionality.
     // local[*] uses all available CPU cores as worker threads — for local dev only.
@@ -47,10 +48,11 @@ object Main {
     // value arrives as binary. Cast to String, then use from_json to parse it.
     // StructType defines only the fields we care about — extra JSON fields are ignored.
     // If a field is missing in the JSON, Spark fills it with null.
+    import GitHubEventSchema._
     val githubSchema = new StructType()
-      .add("type",  StringType)
-      .add("actor", new StructType().add("login", StringType))
-      .add("repo",  new StructType().add("name",  StringType))
+      .add(F_TYPE,  StringType)
+      .add(F_ACTOR, new StructType().add(F_LOGIN,     StringType))
+      .add(F_REPO,  new StructType().add(F_REPO_NAME, StringType))
 
     val parsedEvents = rawKafkaStream
       .select(
@@ -58,9 +60,9 @@ object Main {
         col("timestamp") // Kafka ingestion timestamp — used as event time in Stage 3
       )
       .select(
-        col("event.type").alias("event_type"),
-        col("event.actor.login").alias("actor"),
-        col("event.repo.name").alias("repo_name"),
+        col(s"event.$F_TYPE").alias("event_type"),
+        col(s"event.$F_ACTOR.$F_LOGIN").alias("actor"),
+        col(s"event.$F_REPO.$F_REPO_NAME").alias("repo_name"),
         col("timestamp")
       )
 

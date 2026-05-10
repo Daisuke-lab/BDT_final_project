@@ -27,9 +27,20 @@ val assemblySettings = Seq(
   }
 )
 
+// ── Shared schema contract ────────────────────────────────────────────────────
+lazy val schema = project
+  .in(file("schema"))
+  .settings(
+    name             := "schema",
+    autoScalaLibrary := false,
+    crossPaths       := false,
+    javacOptions ++= Seq("--release", "11")
+  )
+
 // ── Part 1 — ingestion (Java 11) ─────────────────────────────────────────────
 lazy val ingestion = project
   .in(file("ingestion"))
+  .dependsOn(schema)
   .settings(
     name             := "ingestion",
     autoScalaLibrary := false,
@@ -46,6 +57,7 @@ lazy val ingestion = project
 // ── Part 2/3/5 — streaming (Scala 2.12 + Spark 3.1.2) ───────────────────────
 lazy val streaming = project
   .in(file("streaming"))
+  .dependsOn(schema)
   .settings(
     name                := "streaming",
     scalaVersion        := scala2,
@@ -154,7 +166,7 @@ addCommandAlias("fdst", "vizFrontend/publishDist")
 
 lazy val root = project
   .in(file("."))
-  .aggregate(ingestion, streaming, vizCommonJVM, vizCommonJS, vizBackend, vizFrontend)
+  .aggregate(schema, ingestion, streaming, vizCommonJVM, vizCommonJS, vizBackend, vizFrontend)
   .settings(
     name           := "bigdata2026-final",
     publish / skip := true

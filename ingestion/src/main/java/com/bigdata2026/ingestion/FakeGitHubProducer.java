@@ -1,12 +1,12 @@
 package com.bigdata2026.ingestion;
 
+import com.bigdata2026.schema.GitHubEventSchema;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import java.util.Properties;
 import java.util.Random;
 
 public final class FakeGitHubProducer {
-    private static final String TOPIC = "github-events";
     private static final String[] EVENT_TYPES = {
         "PushEvent", "PullRequestEvent", "IssuesEvent", "WatchEvent", "ForkEvent"
     };
@@ -31,20 +31,23 @@ public final class FakeGitHubProducer {
 
         // try-with-resources ensures the producer is flushed and closed on exit
         try (KafkaProducer<String, String> producer = new KafkaProducer<>(props)) {
-            System.out.printf("[fake-producer] Connected to %s, publishing to topic '%s'%n", broker, TOPIC);
+            System.out.printf("[fake-producer] Connected to %s, publishing to topic '%s'%n", broker, GitHubEventSchema.TOPIC);
             while (true) {
                 String type  = EVENT_TYPES[rng.nextInt(EVENT_TYPES.length)];
                 String actor = ACTORS[rng.nextInt(ACTORS.length)];
                 String repo  = REPOS[rng.nextInt(REPOS.length)];
                 String json  = String.format(
-                    "{\"type\":\"%s\",\"actor\":{\"login\":\"%s\"},\"repo\":{\"name\":\"%s\"},\"created_at\":\"%s\"}",
-                    type, actor, repo, java.time.Instant.now()
+                    "{\"%s\":\"%s\",\"%s\":{\"%s\":\"%s\"},\"%s\":{\"%s\":\"%s\"},\"%s\":\"%s\"}",
+                    GitHubEventSchema.F_TYPE, type,
+                    GitHubEventSchema.F_ACTOR, GitHubEventSchema.F_LOGIN, actor,
+                    GitHubEventSchema.F_REPO, GitHubEventSchema.F_REPO_NAME, repo,
+                    GitHubEventSchema.F_CREATED_AT, java.time.Instant.now()
                 );
 
                 // ProducerRecord(topic, key, value)
                 // The key is used for partition routing — same key always goes to the same partition.
                 // send() is async: it batches internally and returns a Future.
-                producer.send(new ProducerRecord<>(TOPIC, actor, json));
+                producer.send(new ProducerRecord<>(GitHubEventSchema.TOPIC, actor, json));
                 System.out.println("[fake-producer] sent: " + json);
                 Thread.sleep(500);
             }
