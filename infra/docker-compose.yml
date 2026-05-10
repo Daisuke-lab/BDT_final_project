@@ -57,6 +57,7 @@ services:
     environment:
       HBASE_ZOOKEEPER_QUORUM: hbase
       HBASE_ZOOKEEPER_PORT: "2181"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000"
 
   frontend:
     image: localhost/visualization-frontend:latest
