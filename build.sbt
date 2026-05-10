@@ -7,7 +7,7 @@ ThisBuild / version      := "0.1.0-SNAPSHOT"
 val scala3 = "3.7.3"
 val scala2 = "2.12.18"
 
-val sparkVersion  = "3.1.2"
+val sparkVersion  = "3.5.1"
 val kafkaVersion  = "3.2.3"
 val hbaseVersion  = "2.1.10"
 val zioVersion    = "2.1.16"
@@ -27,9 +27,20 @@ val assemblySettings = Seq(
   }
 )
 
+// ── Shared schema contract ────────────────────────────────────────────────────
+lazy val schema = project
+  .in(file("schema"))
+  .settings(
+    name             := "schema",
+    autoScalaLibrary := false,
+    crossPaths       := false,
+    javacOptions ++= Seq("--release", "11")
+  )
+
 // ── Part 1 — ingestion (Java 11) ─────────────────────────────────────────────
 lazy val ingestion = project
   .in(file("ingestion"))
+  .dependsOn(schema)
   .settings(
     name             := "ingestion",
     autoScalaLibrary := false,
@@ -46,9 +57,27 @@ lazy val ingestion = project
 // ── Part 2/3/5 — streaming (Scala 2.12 + Spark 3.1.2) ───────────────────────
 lazy val streaming = project
   .in(file("streaming"))
+  .dependsOn(schema)
   .settings(
     name                := "streaming",
     scalaVersion        := scala2,
+    run / fork          := true,
+    javaOptions ++= Seq(
+      "--add-opens=java.base/java.lang=ALL-UNNAMED",
+      "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+      "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+      "--add-opens=java.base/java.io=ALL-UNNAMED",
+      "--add-opens=java.base/java.net=ALL-UNNAMED",
+      "--add-opens=java.base/java.nio=ALL-UNNAMED",
+      "--add-opens=java.base/java.util=ALL-UNNAMED",
+      "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+      "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+      "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+      "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+      "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+      "--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED"
+    ),
     Compile / mainClass := Some("com.bigdata2026.streaming.Main"),
     libraryDependencies ++= Seq(
       "org.apache.spark" %% "spark-core"           % sparkVersion,
@@ -137,7 +166,7 @@ addCommandAlias("fdst", "vizFrontend/publishDist")
 
 lazy val root = project
   .in(file("."))
-  .aggregate(ingestion, streaming, vizCommonJVM, vizCommonJS, vizBackend, vizFrontend)
+  .aggregate(schema, ingestion, streaming, vizCommonJVM, vizCommonJS, vizBackend, vizFrontend)
   .settings(
     name           := "bigdata2026-final",
     publish / skip := true
