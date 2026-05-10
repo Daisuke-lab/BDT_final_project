@@ -41,6 +41,14 @@ services:
     depends_on: [kafka]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: github-events
+      POLL_INTERVAL: "10"
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"         # set in your shell before running docker compose
+      # ── MSK SASL (leave unset for local Kafka) ──────────────────────────────
+      # KAFKA_SECURITY_PROTOCOL: SASL_SSL
+      # KAFKA_SASL_MECHANISM: SCRAM-SHA-512
+      # KAFKA_SASL_USERNAME: msk_iot_online_key
+      # KAFKA_SASL_PASSWORD: msk_iot_online_secret
 
   streaming:
     image: localhost/streaming:latest

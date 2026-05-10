@@ -13,3 +13,7 @@ project/metals.sbt
 *.class
 *.log
 /.mcp.json
+test-scripts/
+# local secrets — never commit
+.env.local
+ingestion/.env.local
