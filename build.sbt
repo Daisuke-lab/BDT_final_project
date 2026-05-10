@@ -1,4 +1,5 @@
 import org.scalajs.linker.interface.ModuleKind
+import com.w47s0n.scalajscli.ScalaJsCli.autoImport._
 
 ThisBuild / organization := "com.bigdata2026"
 ThisBuild / version      := "0.1.0-SNAPSHOT"
@@ -30,34 +31,34 @@ val assemblySettings = Seq(
 lazy val ingestion = project
   .in(file("ingestion"))
   .settings(
-    name := "ingestion",
+    name             := "ingestion",
     autoScalaLibrary := false,
     crossPaths       := false,
     javacOptions ++= Seq("--release", "11"),
     Compile / mainClass := Some("com.bigdata2026.ingestion.Main"),
     libraryDependencies ++= Seq(
-      "org.apache.kafka" %  "kafka-clients" % kafkaVersion,
-      "org.slf4j"        %  "slf4j-simple"  % "2.0.9"
+      "org.apache.kafka" % "kafka-clients" % kafkaVersion,
+      "org.slf4j"        % "slf4j-simple"  % "2.0.9"
     )
   )
-  .settings(assemblySettings*)
+  .settings(assemblySettings *)
 
 // ── Part 2/3/5 — streaming (Scala 2.12 + Spark 3.1.2) ───────────────────────
 lazy val streaming = project
   .in(file("streaming"))
   .settings(
-    name         := "streaming",
-    scalaVersion := scala2,
+    name                := "streaming",
+    scalaVersion        := scala2,
     Compile / mainClass := Some("com.bigdata2026.streaming.Main"),
     libraryDependencies ++= Seq(
       "org.apache.spark" %% "spark-core"           % sparkVersion,
       "org.apache.spark" %% "spark-sql"            % sparkVersion,
       "org.apache.spark" %% "spark-streaming"      % sparkVersion,
       "org.apache.spark" %% "spark-sql-kafka-0-10" % sparkVersion,
-      "org.apache.hbase" %  "hbase-client"         % hbaseVersion
+      "org.apache.hbase"  % "hbase-client"         % hbaseVersion
     )
   )
-  .settings(assemblySettings*)
+  .settings(assemblySettings *)
 
 // ── Part 4 — visualization ────────────────────────────────────────────────────
 
@@ -80,28 +81,29 @@ lazy val vizBackend = project
   .in(file("visualization/backend"))
   .dependsOn(vizCommonJVM)
   .settings(
-    name         := "viz-backend",
-    scalaVersion := scala3,
+    name                := "viz-backend",
+    scalaVersion        := scala3,
+    run / fork          := true,
     Compile / mainClass := Some("com.bigdata2026.backend.Main"),
     libraryDependencies ++= Seq(
       "dev.zio"                     %% "zio"                     % zioVersion,
       "com.softwaremill.sttp.tapir" %% "tapir-zio-http-server"   % tapirVersion,
       "com.softwaremill.sttp.tapir" %% "tapir-swagger-ui-bundle" % tapirVersion,
-      "org.apache.hbase"            %  "hbase-client"            % hbaseVersion,
-      "ch.qos.logback"              %  "logback-classic"         % "1.5.16"
+      "org.apache.hbase"             % "hbase-client"            % hbaseVersion,
+      "ch.qos.logback"               % "logback-classic"         % "1.5.16"
     )
   )
-  .settings(assemblySettings*)
+  .settings(assemblySettings *)
 
 lazy val vizFrontend = project
   .in(file("visualization/frontend"))
   .enablePlugins(ScalaJSPlugin)
   .dependsOn(vizCommonJS)
   .settings(
-    name         := "viz-frontend",
-    scalaVersion := scala3,
+    name                            := "viz-frontend",
+    scalaVersion                    := scala3,
     scalaJSUseMainModuleInitializer := true,
-    Compile / mainClass := Some("com.bigdata2026.frontend.Main"),
+    Compile / mainClass             := Some("com.bigdata2026.frontend.Main"),
     scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.ESModule)),
     libraryDependencies ++= Seq(
       "io.indigoengine"               %%% "tyrian-zio"       % tyrianVersion,
@@ -109,8 +111,30 @@ lazy val vizFrontend = project
       "com.softwaremill.sttp.client4" %%% "zio"              % "4.0.0"
     )
   )
+  .settings(
+    jsTool := JSToolConfig(
+      installPackagesCommand = Cmd.npm.install.withPrefix("visualization/frontend"),
+      dev = DevConfig(
+        command = Cmd.npm.run("dev").withPrefix("visualization/frontend"),
+        startupMessage = "Starting Vite dev server...",
+        successMessage = "Dev server ready!  http://localhost:9876"
+      ),
+      build = BuildConfig(
+        command = Cmd.npm.build.withPrefix("visualization/frontend"),
+        startupMessage = "Building for production...",
+        successMessage = "Build complete!"
+      )
+    )
+  )
 
 // ── Root aggregator ───────────────────────────────────────────────────────────
+addCommandAlias("p1", "ingestion/run")
+addCommandAlias("p2", "streaming/run")
+addCommandAlias("bs", "vizBackend/reStart")
+addCommandAlias("bx", "vizBackend/reStop")
+addCommandAlias("fdev", "vizFrontend/dev")
+addCommandAlias("fdst", "vizFrontend/publishDist")
+
 lazy val root = project
   .in(file("."))
   .aggregate(ingestion, streaming, vizCommonJVM, vizCommonJS, vizBackend, vizFrontend)
