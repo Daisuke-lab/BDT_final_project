@@ -21,6 +21,11 @@ services:
 
   hbase:
     image: harisekhon/hbase:2.1
+    hostname: hbase-local
+    networks:
+      default:
+        aliases:
+          - hbase-local  # lets other containers resolve 'hbase-local' → this container
     environment:
       HBASE_CONF_hbase_rootdir: file:///hbase-data
     ports:

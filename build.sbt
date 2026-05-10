@@ -7,12 +7,12 @@ ThisBuild / version      := "0.1.0-SNAPSHOT"
 val scala3 = "3.7.3"
 val scala2 = "2.12.18"
 
-val sparkVersion  = "3.5.1"
-val kafkaVersion  = "3.2.3"
-val hbaseVersion  = "2.1.10"
-val zioVersion    = "2.1.16"
-val tapirVersion  = "1.11.40"
-val tyrianVersion = "0.14.0"
+val sparkVersion    = "3.5.1"
+val kafkaVersion    = "3.2.3"
+val hbaseVersion    = "2.1.10"
+val zioVersion      = "2.1.16"
+val zioHttpVersion  = "3.8.0"
+val tyrianVersion   = "0.14.0"
 
 // Shared assembly settings for all JVM fat-JAR modules.
 // Stable jar name (no version suffix) keeps Dockerfile COPY paths fixed.
@@ -98,9 +98,8 @@ lazy val vizCommon = crossProject(JVMPlatform, JSPlatform)
     name         := "viz-common",
     scalaVersion := scala3,
     libraryDependencies ++= Seq(
-      "dev.zio"                     %%% "zio-json"       % "0.7.36",
-      "com.softwaremill.sttp.tapir" %%% "tapir-core"     % tapirVersion,
-      "com.softwaremill.sttp.tapir" %%% "tapir-json-zio" % tapirVersion
+      "dev.zio" %%% "zio-json" % "0.7.36",
+      "dev.zio" %%% "zio-http" % zioHttpVersion
     )
   )
 lazy val vizCommonJVM = vizCommon.jvm
@@ -113,13 +112,15 @@ lazy val vizBackend = project
     name                := "viz-backend",
     scalaVersion        := scala3,
     run / fork          := true,
+    run / envVars       := Map("CORS_ALLOWED_ORIGINS" -> "http://localhost:9876"),
     Compile / mainClass := Some("com.bigdata2026.backend.Main"),
     libraryDependencies ++= Seq(
-      "dev.zio"                     %% "zio"                     % zioVersion,
-      "com.softwaremill.sttp.tapir" %% "tapir-zio-http-server"   % tapirVersion,
-      "com.softwaremill.sttp.tapir" %% "tapir-swagger-ui-bundle" % tapirVersion,
-      "org.apache.hbase"             % "hbase-client"            % hbaseVersion,
-      "ch.qos.logback"               % "logback-classic"         % "1.5.16"
+      "dev.zio"          %% "zio"                 % zioVersion,
+      "dev.zio"          %% "zio-http"            % zioHttpVersion,
+      "dev.zio"          %% "zio-logging"         % "2.4.0",
+      "dev.zio"          %% "zio-logging-slf4j2"  % "2.4.0",
+      "org.apache.hbase" %  "hbase-client"        % hbaseVersion,
+      "ch.qos.logback"   %  "logback-classic"     % "1.5.16"
     )
   )
   .settings(assemblySettings *)
@@ -135,9 +136,9 @@ lazy val vizFrontend = project
     Compile / mainClass             := Some("com.bigdata2026.frontend.Main"),
     scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.ESModule)),
     libraryDependencies ++= Seq(
-      "io.indigoengine"               %%% "tyrian-zio"       % tyrianVersion,
-      "dev.zio"                       %%% "zio-interop-cats" % "23.1.0.3",
-      "com.softwaremill.sttp.client4" %%% "zio"              % "4.0.0"
+      "io.indigoengine"            %%% "tyrian-zio"       % tyrianVersion,
+      "dev.zio"                    %%% "zio-interop-cats" % "23.1.0.3",
+      "com.softwaremill.quicklens" %%% "quicklens"        % "1.9.7"
     )
   )
   .settings(
