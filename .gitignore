@@ -1,0 +1,14 @@
+.sbt-launch-*.jar
+target/
+.bsp/
+.metals/
+.bloop/
+.scala-build/
+.idea/
+.vscode/
+node_modules/
+project/project/
+project/metals.sbt
+*.class
+*.log
+/.mcp.json

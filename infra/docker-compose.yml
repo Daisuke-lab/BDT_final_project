@@ -1,0 +1,59 @@
+services:
+  # ── Infrastructure ────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports: ["2181:2181"]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports: ["29092:29092"]   # host access on localhost:29092
+
+  hbase:
+    image: harisekhon/hbase:2.1
+    environment:
+      HBASE_CONF_hbase_rootdir: file:///hbase-data
+    ports:
+      - "2182:2181"   # HBase ZooKeeper (host 2182 → container 2181)
+      - "16000:16000"
+      - "16010:16010" # HBase Master UI  →  http://localhost:16010
+      - "16020:16020"
+      - "16030:16030"
+
+  # ── Application ───────────────────────────────────────────────────────────
+  ingestion:
+    image: localhost/ingestion:latest
+    depends_on: [kafka]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+  streaming:
+    image: localhost/streaming:latest
+    depends_on: [kafka, hbase]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      HBASE_ZOOKEEPER_QUORUM: hbase
+      HBASE_ZOOKEEPER_PORT: "2181"
+
+  backend:
+    image: localhost/visualization-backend:latest
+    depends_on: [hbase]
+    ports: ["8080:8080"]
+    environment:
+      HBASE_ZOOKEEPER_QUORUM: hbase
+      HBASE_ZOOKEEPER_PORT: "2181"
+
+  frontend:
+    image: localhost/visualization-frontend:latest
+    depends_on: [backend]
+    ports: ["3000:80"]  # visualization UI  →  http://localhost:3000
