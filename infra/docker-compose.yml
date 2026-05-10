@@ -21,6 +21,11 @@ services:
 
   hbase:
     image: harisekhon/hbase:2.1
+    hostname: hbase-local
+    networks:
+      default:
+        aliases:
+          - hbase-local  # lets other containers resolve 'hbase-local' → this container
     environment:
       HBASE_CONF_hbase_rootdir: file:///hbase-data
     ports:
@@ -52,6 +57,7 @@ services:
     environment:
       HBASE_ZOOKEEPER_QUORUM: hbase
       HBASE_ZOOKEEPER_PORT: "2181"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000"
 
   frontend:
     image: localhost/visualization-frontend:latest
