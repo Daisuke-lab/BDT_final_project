@@ -1,6 +1,6 @@
 package com.bigdata2026.backend.service
 
-import com.bigdata2026.backend.service.realtime.NewReposFeature
+import com.bigdata2026.backend.service.realtime.{NewReposFeature, PushSpeedFeature, RepoStatsFeature}
 import com.bigdata2026.common.ws.ServerMsg
 import zio.*
 import zio.stream.ZStream
@@ -21,10 +21,11 @@ final class FeatureHub(features: List[Feature]):
       .retry(Schedule.fixed(5.seconds))
 
 object FeatureHub:
-  // Add new features here as they are implemented
-  val live: URLayer[NewReposFeature, FeatureHub] =
+  val live: URLayer[NewReposFeature & PushSpeedFeature & RepoStatsFeature, FeatureHub] =
     ZLayer.fromZIO {
-      ZIO.service[NewReposFeature].map { newRepos =>
-        new FeatureHub(List(newRepos))
-      }
+      for
+        newRepos   <- ZIO.service[NewReposFeature]
+        pushSpeed  <- ZIO.service[PushSpeedFeature]
+        repoStats  <- ZIO.service[RepoStatsFeature]
+      yield new FeatureHub(List(newRepos, pushSpeed, repoStats))
     }

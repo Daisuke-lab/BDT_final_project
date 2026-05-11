@@ -17,3 +17,4 @@ test-scripts/
 # local secrets — never commit
 .env.local
 ingestion/.env.local
+infra/local.env

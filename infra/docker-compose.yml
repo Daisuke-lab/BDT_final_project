@@ -55,8 +55,15 @@ services:
     depends_on: [kafka, hbase]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: github-events
+      KAFKA_GROUP_ID: github-streaming
       HBASE_ZOOKEEPER_QUORUM: hbase
       HBASE_ZOOKEEPER_PORT: "2181"
+      # ── MSK SASL (leave unset for local Kafka) ──────────────────────────────
+      # KAFKA_SECURITY_PROTOCOL: SASL_SSL
+      # KAFKA_SASL_MECHANISM: SCRAM-SHA-512
+      # KAFKA_SASL_USERNAME: msk_iot_online_key
+      # KAFKA_SASL_PASSWORD: msk_iot_online_secret
 
   backend:
     image: localhost/visualization-backend:latest
