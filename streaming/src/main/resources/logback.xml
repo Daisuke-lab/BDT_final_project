@@ -1,0 +1,22 @@
+<configuration>
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{0} — %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Silence Kafka client protocol noise -->
+  <logger name="org.apache.kafka"              level="WARN"/>
+  <!-- Silence zio-kafka internal runloop noise -->
+  <logger name="zio.kafka"                     level="WARN"/>
+  <!-- Silence HBase connection chatter -->
+  <logger name="org.apache.hadoop"             level="WARN"/>
+  <logger name="org.apache.zookeeper"          level="WARN"/>
+
+  <!-- Our app logs stay at INFO -->
+  <logger name="com.bigdata2026"               level="INFO"/>
+
+  <root level="INFO">
+    <appender-ref ref="STDOUT"/>
+  </root>
+</configuration>

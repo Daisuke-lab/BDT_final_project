@@ -1,17 +1,40 @@
 import org.scalajs.linker.interface.ModuleKind
 import com.w47s0n.scalajscli.ScalaJsCli.autoImport._
 
+// Reads infra/local.env (gitignored) as KEY=VALUE pairs.
+// Falls back to empty map if the file doesn't exist so CI/CD can inject via real env vars.
+def localEnv: Map[String, String] = {
+  val f = new java.io.File("infra/local.env")
+  if (!f.exists) Map.empty
+  else {
+    val src = scala.io.Source.fromFile(f)
+    try src.getLines()
+      .map(_.trim)
+      .filterNot(l => l.isEmpty || l.startsWith("#"))
+      .flatMap { line =>
+        line.split("=", 2) match {
+          case Array(k, v) => Some(k.trim -> v.trim)
+          case _           => None
+        }
+      }
+      .toMap
+    finally src.close()
+  }
+}
+
 ThisBuild / organization := "com.bigdata2026"
 ThisBuild / version      := "0.1.0-SNAPSHOT"
 
-val scala3 = "3.7.3"
-val scala2 = "2.12.18"
+val scala3    = "3.7.3"
+val scala2    = "2.12.18"
+val scala213  = "2.13.16"
 
 val sparkVersion    = "3.5.1"
 val kafkaVersion    = "3.2.3"
 val hbaseVersion    = "2.1.10"
 val zioVersion      = "2.1.16"
 val zioHttpVersion  = "3.8.0"
+val zioKafkaVersion = "2.9.0"
 val tyrianVersion   = "0.14.0"
 
 // Shared assembly settings for all JVM fat-JAR modules.
@@ -55,37 +78,24 @@ lazy val ingestion = project
   )
   .settings(assemblySettings *)
 
-// ── Part 2/3/5 — streaming (Scala 2.12 + Spark 3.1.2) ───────────────────────
+// ── Part 2/3/5 — streaming (Scala 2.13 + ZIO + zio-kafka) ───────────────────
 lazy val streaming = project
   .in(file("streaming"))
   .dependsOn(schema)
   .settings(
     name                := "streaming",
-    scalaVersion        := scala2,
+    scalaVersion        := scala213,
     run / fork          := true,
-    javaOptions ++= Seq(
-      "--add-opens=java.base/java.lang=ALL-UNNAMED",
-      "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
-      "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
-      "--add-opens=java.base/java.io=ALL-UNNAMED",
-      "--add-opens=java.base/java.net=ALL-UNNAMED",
-      "--add-opens=java.base/java.nio=ALL-UNNAMED",
-      "--add-opens=java.base/java.util=ALL-UNNAMED",
-      "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-      "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
-      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
-      "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
-      "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
-      "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
-      "--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED"
-    ),
+    run / envVars       := localEnv,
     Compile / mainClass := Some("com.bigdata2026.streaming.Main"),
     libraryDependencies ++= Seq(
-      "org.apache.spark" %% "spark-core"           % sparkVersion,
-      "org.apache.spark" %% "spark-sql"            % sparkVersion,
-      "org.apache.spark" %% "spark-streaming"      % sparkVersion,
-      "org.apache.spark" %% "spark-sql-kafka-0-10" % sparkVersion,
-      "org.apache.hbase"  % "hbase-client"         % hbaseVersion
+      "dev.zio"          %% "zio"                 % zioVersion,
+      "dev.zio"          %% "zio-kafka"           % zioKafkaVersion,
+      "dev.zio"          %% "zio-json"            % "0.7.36",
+      "dev.zio"          %% "zio-logging"         % "2.4.0",
+      "dev.zio"          %% "zio-logging-slf4j2"  % "2.4.0",
+      "org.apache.hbase"  % "hbase-client"        % hbaseVersion,
+      "ch.qos.logback"    % "logback-classic"     % "1.5.16"
     )
   )
   .settings(assemblySettings *)
@@ -158,9 +168,46 @@ lazy val vizFrontend = project
     )
   )
 
+// ── Part 5 — Spark Structured Streaming (Scala 2.13) ─────────────────────────
+lazy val sparkStreaming = project
+  .in(file("spark-streaming"))
+  .settings(
+    name             := "spark-streaming",
+    scalaVersion     := scala213,
+    run / fork       := true,
+    run / javaOptions ++= Seq(
+      "-Dorg.slf4j.simpleLogger.defaultLogLevel=warn",
+      "--add-opens=java.base/java.lang=ALL-UNNAMED",
+      "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+      "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+      "--add-opens=java.base/java.io=ALL-UNNAMED",
+      "--add-opens=java.base/java.net=ALL-UNNAMED",
+      "--add-opens=java.base/java.nio=ALL-UNNAMED",
+      "--add-opens=java.base/java.util=ALL-UNNAMED",
+      "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+      "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+      "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+      "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+      "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+      "--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED",
+    ),
+    run / envVars    := localEnv,
+    Compile / mainClass := Some("com.bigdata2026.spark.RepoStatsJob"),
+    libraryDependencies ++= Seq(
+      "org.apache.spark" %% "spark-core"           % sparkVersion,
+      "org.apache.spark" %% "spark-sql"            % sparkVersion,
+      "org.apache.spark" %% "spark-sql-kafka-0-10" % sparkVersion,
+      "org.apache.hbase"  % "hbase-client"         % hbaseVersion,
+      "org.slf4j"         % "slf4j-simple"         % "2.0.9"
+    )
+  )
+  .settings(assemblySettings *)
+
 // ── Root aggregator ───────────────────────────────────────────────────────────
 addCommandAlias("p1", "ingestion/run")
 addCommandAlias("p2", "streaming/run")
+addCommandAlias("p3", "sparkStreaming/run")
 addCommandAlias("bs", "vizBackend/reStart")
 addCommandAlias("bx", "vizBackend/reStop")
 addCommandAlias("fdev", "vizFrontend/dev")
@@ -168,7 +215,7 @@ addCommandAlias("fdst", "vizFrontend/publishDist")
 
 lazy val root = project
   .in(file("."))
-  .aggregate(schema, ingestion, streaming, vizCommonJVM, vizCommonJS, vizBackend, vizFrontend)
+  .aggregate(schema, ingestion, streaming, sparkStreaming, vizCommonJVM, vizCommonJS, vizBackend, vizFrontend)
   .settings(
     name           := "bigdata2026-final",
     publish / skip := true
