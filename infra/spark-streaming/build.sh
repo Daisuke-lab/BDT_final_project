@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)"
-
-sbt sparkStreaming/assembly
-
-docker build \
-  -f infra/spark-streaming/Dockerfile \
-  -t spark-streaming:latest \
-  .
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$ROOT"
+SBT="$ROOT/sbt"
+echo "==> Building spark-streaming fat JAR..."
+"$SBT" 'sparkStreaming / assembly'
+echo "==> Building image localhost/spark-streaming:latest..."
+docker build -f infra/spark-streaming/Dockerfile -t localhost/spark-streaming:latest .
+echo "==> Done: localhost/spark-streaming:latest"

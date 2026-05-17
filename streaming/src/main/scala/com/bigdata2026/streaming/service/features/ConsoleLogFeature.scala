@@ -9,7 +9,11 @@ final class ConsoleLogFeature extends StreamFeature {
   val name = "console-log"
   def process(events: ZStream[Any, Nothing, GitHubEvent]): Task[Unit] =
     events.foreach { e =>
-      val extra = if (e.eventType == "CreateEvent") s" refType=${e.refType}" else ""
+      val extra = e.eventType match {
+        case "PushEvent"   => s" push_size=${e.pushSize} push_ref=${e.pushRef}"
+        case "CreateEvent" => s" refType=${e.refType}"
+        case _             => ""
+      }
       ZIO.logInfo(s"[${e.eventType}] ${e.actorLogin} → ${e.repoName} (weight=${e.trendWeight}$extra)")
     }
 }

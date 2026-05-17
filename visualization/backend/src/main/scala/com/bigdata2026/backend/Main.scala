@@ -3,7 +3,7 @@ package com.bigdata2026.backend
 import com.bigdata2026.backend.config.CorsConfig
 import com.bigdata2026.backend.http.WsRoutes
 import com.bigdata2026.backend.service.FeatureHub
-import com.bigdata2026.backend.service.realtime.{ConnectionManager, MessageSender, NewReposFeature, PushSpeedFeature, RepoStatsFeature}
+import com.bigdata2026.backend.service.realtime.{ActorStatsFeature, ConnectionManager, LanguageStatsFeature, MessageSender, NewReposFeature, PushSpeedFeature, RepoStatsFeature}
 import com.bigdata2026.common.ws.ServerMsg
 import zio.*
 import zio.http.*
@@ -32,5 +32,7 @@ object Main extends ZIOAppDefault:
       NewReposFeature.live,
       PushSpeedFeature.live,
       RepoStatsFeature.live,
+      LanguageStatsFeature.live,
+      ActorStatsFeature.live,
       FeatureHub.live,
     )

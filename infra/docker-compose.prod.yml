@@ -1,0 +1,95 @@
+# Standalone prod compose — no local Kafka/Zookeeper/ingestion.
+# Streaming connects to MSK; credentials come from infra/local.env via prod.sh.
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    hostname: namenode
+    environment:
+      CLUSTER_NAME: bigdata-cluster
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_replication: "1"
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    depends_on: [namenode]
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_replication: "1"
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+
+  hdfs-init:
+    image: bde2020/hadoop-base:2.0.0-hadoop3.2.1-java8
+    depends_on:
+      namenode:
+        condition: service_healthy
+      datanode:
+        condition: service_started
+    volumes:
+      - ../data:/data:ro
+      - ./hdfs-init.sh:/hdfs-init.sh:ro
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+    command: /hdfs-init.sh
+    restart: "no"
+
+  hbase:
+    image: harisekhon/hbase:2.1
+    hostname: hbase-local
+    networks:
+      default:
+        aliases:
+          - hbase-local
+    environment:
+      HBASE_CONF_hbase_rootdir: file:///hbase-data
+    ports:
+      - "2182:2181"
+      - "16000:16000"
+      - "16010:16010"
+      - "16020:16020"
+      - "16030:16030"
+
+  streaming:
+    image: localhost/spark-streaming:latest
+    depends_on:
+      hbase:
+        condition: service_started
+      namenode:
+        condition: service_healthy
+      hdfs-init:
+        condition: service_completed_successfully
+    restart: on-failure
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "${KAFKA_BOOTSTRAP_SERVERS}"
+      KAFKA_SECURITY_PROTOCOL: "${KAFKA_SECURITY_PROTOCOL}"
+      KAFKA_SASL_MECHANISM: "${KAFKA_SASL_MECHANISM}"
+      KAFKA_SASL_USERNAME: "${KAFKA_SASL_USERNAME}"
+      KAFKA_SASL_PASSWORD: "${KAFKA_SASL_PASSWORD}"
+      KAFKA_TOPIC: "${KAFKA_TOPIC}"
+      KAFKA_GROUP_ID: "${KAFKA_GROUP_ID}"
+      HBASE_ZOOKEEPER_QUORUM: hbase
+      HBASE_ZOOKEEPER_PORT: "2181"
+      HDFS_NAMENODE_URL: hdfs://namenode:9000
+
+  backend:
+    image: localhost/visualization-backend:latest
+    depends_on: [hbase]
+    ports: ["8080:8080"]
+    environment:
+      HBASE_ZOOKEEPER_QUORUM: hbase
+      HBASE_ZOOKEEPER_PORT: "2181"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000"
+
+  frontend:
+    image: localhost/visualization-frontend:latest
+    depends_on: [backend]
+    ports: ["3000:80"]
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:

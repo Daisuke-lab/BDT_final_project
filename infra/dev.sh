@@ -1,23 +1,40 @@
 #!/usr/bin/env bash
-# Start Kafka + Zookeeper + HBase for local development.
-# Run ingestion and streaming via sbt instead of Docker.
-# Usage: bash infra/dev.sh
+# Start the full stack locally (Kafka + Zookeeper + HDFS + HBase + Ingestion + Streaming + Visualization).
+# Streaming connects to the local Kafka — no MSK credentials needed.
+# Reads GITHUB_TOKEN from infra/local.env (gitignored).
+# Usage: bash infra/dev.sh [extra docker compose flags]
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "==> Starting Kafka (+ Zookeeper) + HBase..."
-docker compose -f "$DIR/docker-compose.yml" up -d zookeeper kafka hbase
+ENV_FILE="$DIR/local.env"
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "ERROR: $ENV_FILE not found. Copy infra/local.env.example and fill in GITHUB_TOKEN." >&2
+  exit 1
+fi
+
+set -o allexport
+source "$ENV_FILE"
+set +o allexport
+
+echo "==> Building all images..."
+bash "$DIR/build-all.sh"
 
 echo ""
-echo "==> Ready:"
-docker compose -f "$DIR/docker-compose.yml" ps zookeeper kafka hbase
+echo "==> Starting full dev cluster..."
+docker compose -f "$DIR/docker-compose.yml" up -d "$@"
 
 echo ""
-echo "  Kafka: localhost:29092"
-echo "  HBase: localhost:2182 (Zookeeper client port)"
+echo "==> Cluster is up:"
+docker compose -f "$DIR/docker-compose.yml" ps
+
 echo ""
-echo "  sbt ingestion/run   -- GitHub event producer -> Kafka"
-echo "  sbt streaming/run   -- ZIO Kafka consumer -> HBase"
-echo "  sbt vizBackend/run  -- WebSocket backend on :8080"
+echo "Useful endpoints:"
+echo "  Kafka:             localhost:29092"
+echo "  HBase Master UI:   http://localhost:16010"
+echo "  HDFS NameNode UI:  http://localhost:9870"
+echo "  Visualization API: http://localhost:8080"
+echo "  Visualization UI:  http://localhost:3000"
+echo ""
+echo "For frontend hot-reload:  sbt fdev  (serves on :9876)"
 echo ""
 echo "To stop: docker compose -f infra/docker-compose.yml down"

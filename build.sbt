@@ -1,5 +1,7 @@
 import org.scalajs.linker.interface.ModuleKind
 import com.w47s0n.scalajscli.ScalaJsCli.autoImport._
+import sbtwelcome._
+import scala.Console._
 
 // Reads infra/local.env (gitignored) as KEY=VALUE pairs.
 // Falls back to empty map if the file doesn't exist so CI/CD can inject via real env vars.
@@ -22,8 +24,44 @@ def localEnv: Map[String, String] = {
   }
 }
 
+// Local Kafka overrides — keeps GITHUB_TOKEN from local.env but forces Kafka to localhost.
+def localKafkaEnv: Map[String, String] =
+  localEnv.filter(_._1 == "GITHUB_TOKEN") ++ Map(
+    "KAFKA_BOOTSTRAP_SERVERS" -> "localhost:29092",
+    "KAFKA_SECURITY_PROTOCOL" -> "",
+    "KAFKA_SASL_USERNAME"     -> "",
+    "KAFKA_SASL_PASSWORD"     -> "",
+    "KAFKA_TOPIC"             -> "github-events",
+    "KAFKA_GROUP_ID"          -> "github-streaming"
+  )
+
 ThisBuild / organization := "com.bigdata2026"
 ThisBuild / version      := "0.1.0-SNAPSHOT"
+
+logo :=
+  s"""
+     |  ██████╗ ██╗ ██████╗     ██████╗  █████╗ ████████╗ █████╗
+     |  ██╔══██╗██║██╔════╝     ██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗
+     |  ██████╔╝██║██║  ███╗    ██║  ██║███████║   ██║   ███████║
+     |  ██╔══██╗██║██║   ██║    ██║  ██║██╔══██║   ██║   ██╔══██║
+     |  ██████╔╝██║╚██████╔╝    ██████╔╝██║  ██║   ██║   ██║  ██║
+     |  ╚═════╝ ╚═╝ ╚═════╝     ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
+     |
+     |  GitHub Pulse — Real-time Repository Analytics  v${version.value}
+     |  Kafka · Spark Streaming · HBase · ZIO · Tyrian
+     |""".stripMargin
+
+usefulTasks := Seq(
+  UsefulTask("ingestion/run",      "GitHub event producer → production Kafka").alias("p1"),
+  UsefulTask("p1dev",              "GitHub event producer → local Kafka"),
+  UsefulTask("streaming/run",      "ZIO streaming debug consumer → production Kafka").alias("p2"),
+  UsefulTask("p2dev",              "ZIO streaming debug consumer → local Kafka"),
+  UsefulTask("sparkStreaming/run", "Spark Structured Streaming → HBase").alias("p3"),
+  UsefulTask("vizBackend/reStart", "WebSocket backend on :8080").alias("bs"),
+  UsefulTask("vizFrontend/dev",    "Frontend dev server on :9876").alias("fdev"),
+)
+
+logoColor := CYAN
 
 val scala3    = "3.7.3"
 val scala2    = "2.12.18"
@@ -69,6 +107,8 @@ lazy val ingestion = project
     autoScalaLibrary := false,
     crossPaths       := false,
     javacOptions ++= Seq("--release", "11"),
+    run / fork       := true,
+    run / envVars    := localEnv,
     Compile / mainClass := Some("com.bigdata2026.ingestion.Main"),
     libraryDependencies ++= Seq(
       "org.apache.kafka"    %  "kafka-clients"    % kafkaVersion,
@@ -94,7 +134,6 @@ lazy val streaming = project
       "dev.zio"          %% "zio-json"            % "0.7.36",
       "dev.zio"          %% "zio-logging"         % "2.4.0",
       "dev.zio"          %% "zio-logging-slf4j2"  % "2.4.0",
-      "org.apache.hbase"  % "hbase-client"        % hbaseVersion,
       "ch.qos.logback"    % "logback-classic"     % "1.5.16"
     )
   )
@@ -198,7 +237,8 @@ lazy val sparkStreaming = project
       "org.apache.spark" %% "spark-core"           % sparkVersion,
       "org.apache.spark" %% "spark-sql"            % sparkVersion,
       "org.apache.spark" %% "spark-sql-kafka-0-10" % sparkVersion,
-      "org.apache.hbase"  % "hbase-client"         % hbaseVersion,
+      ("org.apache.hbase"  % "hbase-client"         % hbaseVersion)
+        .excludeAll(ExclusionRule(organization = "org.apache.hadoop")),
       "org.slf4j"         % "slf4j-simple"         % "2.0.9"
     )
   )
@@ -206,7 +246,15 @@ lazy val sparkStreaming = project
 
 // ── Root aggregator ───────────────────────────────────────────────────────────
 addCommandAlias("p1", "ingestion/run")
-addCommandAlias("p2", "streaming/run")
+
+// p1dev: ingestion → local Kafka (keeps GITHUB_TOKEN from local.env, overrides Kafka to localhost)
+commands += Command.command("p1dev") { state =>
+  val env    = localKafkaEnv
+  val envStr = env.map { case (k, v) => s""""$k" -> "$v"""" }.mkString(", ")
+  s"set ingestion/run/envVars := Map($envStr)" :: "ingestion/run" :: state
+}
+addCommandAlias("p2",    "streaming/run")
+addCommandAlias("p2dev", ";set streaming/run/envVars := Map.empty[String,String];streaming/run")
 addCommandAlias("p3", "sparkStreaming/run")
 addCommandAlias("bs", "vizBackend/reStart")
 addCommandAlias("bx", "vizBackend/reStop")

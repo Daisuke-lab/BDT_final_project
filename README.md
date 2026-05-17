@@ -14,7 +14,7 @@ Start Kafka only (no other Docker services), then run each module via sbt:
 ```bash
 bash infra/dev.sh          # spin up Kafka + Zookeeper only. Use case: to quickly test ingestion/stream without having to run ./infra/build-all.sh
 sbt ingestion/run          # GitHub event producer → Kafka
-sbt streaming/run          # Spark Structured Streaming consumer ← Kafka
+sbt 'sparkStreaming / run'  # Spark Structured Streaming consumer ← Kafka → HBase
 sbt vizBackend/run
 sbt vizFrontend/fastLinkJS
 ```
@@ -30,7 +30,7 @@ bash infra/up.sh
 
 # Or build one service at a time
 bash infra/ingestion/build.sh
-bash infra/streaming/build.sh
+bash infra/spark-streaming/build.sh
 bash infra/visualization/backend/build.sh
 bash infra/visualization/frontend/build.sh
 ```

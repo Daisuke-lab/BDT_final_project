@@ -23,11 +23,13 @@ object KafkaConfig {
     KafkaConfig(
       brokers          = sys.env.getOrElse("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
       topic            = sys.env.getOrElse("KAFKA_TOPIC",             "github-events"),
-      groupId          = sys.env.getOrElse("KAFKA_GROUP_ID",          "github-streaming"),
+      groupId          = sys.env.getOrElse("KAFKA_GROUP_ID",          s"github-debug-${java.util.UUID.randomUUID()}"),
       username         = sys.env.getOrElse("KAFKA_SASL_USERNAME",     ""),
       password         = sys.env.getOrElse("KAFKA_SASL_PASSWORD",     ""),
       securityProtocol = sys.env.getOrElse("KAFKA_SECURITY_PROTOCOL", ""),
       saslMechanism    = sys.env.getOrElse("KAFKA_SASL_MECHANISM",    "SCRAM-SHA-512")
     )
   )
+
+
 }

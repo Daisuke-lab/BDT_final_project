@@ -1,7 +1,7 @@
 package com.bigdata2026.backend.service.realtime
 
 import com.bigdata2026.backend.service.Feature
-import com.bigdata2026.common.model.RepoStats
+import com.bigdata2026.common.model.ActorStats
 import com.bigdata2026.common.ws.ServerMsg
 import org.apache.hadoop.hbase.{HBaseConfiguration, TableName}
 import org.apache.hadoop.hbase.client.{ConnectionFactory, Scan}
@@ -9,7 +9,7 @@ import org.apache.hadoop.hbase.util.Bytes
 import zio.*
 import zio.stream.ZStream
 
-final class RepoStatsFeature extends Feature:
+final class ActorStatsFeature extends Feature:
 
   def snapshot: Task[ServerMsg] =
     ZIO.attemptBlocking {
@@ -18,7 +18,7 @@ final class RepoStatsFeature extends Feature:
         try parseRows(scanner)
         finally scanner.close()
       }
-    }.map(repos => ServerMsg.RepoStatsSnapshot(repos): ServerMsg)
+    }.map(actors => ServerMsg.ActorStatsSnapshot(actors): ServerMsg)
 
   def liveUpdates: ZStream[Any, Throwable, ServerMsg] =
     ZStream.fromZIO(currentMaxActivity).flatMap { initSince =>
@@ -28,15 +28,15 @@ final class RepoStatsFeature extends Feature:
           ZIO.attemptBlocking {
             withTable { table =>
               val scanner = table.getScanner(new Scan())
-              val repos   = try parseRows(scanner) finally scanner.close()
-              val newMax  = repos.map(_.activityCount).maxOption.getOrElse(watermark)
-              (newMax, if (newMax > watermark) repos else Nil)
+              val actors  = try parseRows(scanner) finally scanner.close()
+              val newMax  = actors.map(_.activityCount).maxOption.getOrElse(watermark)
+              (newMax, if (newMax > watermark) actors else Nil)
             }
           }
         }
-        .flatMap { repos =>
-          if repos.isEmpty then ZStream.empty
-          else ZStream.succeed(ServerMsg.RepoStatsUpdated(repos): ServerMsg)
+        .flatMap { actors =>
+          if actors.isEmpty then ZStream.empty
+          else ZStream.succeed(ServerMsg.ActorStatsUpdated(actors): ServerMsg)
         }
     }
 
@@ -51,21 +51,14 @@ final class RepoStatsFeature extends Feature:
 
   private val CF = Bytes.toBytes("cf")
 
-  private def parseRows(scanner: org.apache.hadoop.hbase.client.ResultScanner): List[RepoStats] =
-    def getLong(row: org.apache.hadoop.hbase.client.Result, col: String): Long =
-      val bytes = row.getValue(CF, Bytes.toBytes(col))
-      if bytes == null then 0L else Bytes.toString(bytes).toLong
+  private def parseRows(scanner: org.apache.hadoop.hbase.client.ResultScanner): List[ActorStats] =
     Iterator.continually(scanner.next())
       .takeWhile(_ != null)
       .map { row =>
-        RepoStats(
-          repoName         = Bytes.toString(row.getRow),
-          starCount        = getLong(row, "star_count"),
-          forkCount        = getLong(row, "fork_count"),
-          pushCount        = getLong(row, "push_count"),
-          pushWeight       = getLong(row, "push_weight"),
-          activityCount    = getLong(row, "activity_count"),
-          contributorCount = getLong(row, "contributor_count"),
+        val bytes = row.getValue(CF, Bytes.toBytes("activity_count"))
+        ActorStats(
+          actorLogin    = Bytes.toString(row.getRow),
+          activityCount = if bytes == null then 0L else Bytes.toString(bytes).toLong,
         )
       }
       .toList
@@ -77,9 +70,9 @@ final class RepoStatsFeature extends Feature:
     conf.set("hbase.zookeeper.property.clientPort",
       sys.env.getOrElse("HBASE_ZOOKEEPER_PORT", "2182"))
     val conn  = ConnectionFactory.createConnection(conf)
-    val table = conn.getTable(TableName.valueOf("repo_stats"))
+    val table = conn.getTable(TableName.valueOf("actor_stats"))
     try f(table)
     finally { table.close(); conn.close() }
 
-object RepoStatsFeature:
-  val live: ULayer[RepoStatsFeature] = ZLayer.succeed(new RepoStatsFeature)
+object ActorStatsFeature:
+  val live: ULayer[ActorStatsFeature] = ZLayer.succeed(new ActorStatsFeature)

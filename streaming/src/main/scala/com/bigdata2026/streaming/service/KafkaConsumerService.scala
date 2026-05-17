@@ -22,10 +22,11 @@ object KafkaConsumerService {
             def events: ZStream[Any, Throwable, GitHubEvent] =
               Consumer
                 .plainStream(Subscription.topics(kafka.topic), Serde.string, Serde.string)
+                .tap(_ => ZIO.logInfo("[Consumer] record received from Kafka"))
                 .mapZIO { record =>
                   val parsed = GitHubEvent.fromEnvelopeJson(record.value)
                   val log = if (parsed.isEmpty)
-                    ZIO.logWarning(s"Failed to parse envelope: ${record.value.take(120)}")
+                    ZIO.logWarning(s"[Consumer] parse failed: ${record.value.take(200)}")
                   else ZIO.unit
                   record.offset.commit *> log.as(parsed)
                 }
@@ -39,6 +40,7 @@ object KafkaConsumerService {
   private def buildSettings(kafka: KafkaConfig): ConsumerSettings = {
     val base = ConsumerSettings(kafka.brokers.split(",").toList)
       .withGroupId(kafka.groupId)
+      .withProperty("auto.offset.reset", "earliest")
     if (kafka.isSasl)
       base
         .withProperty("security.protocol", kafka.securityProtocol)

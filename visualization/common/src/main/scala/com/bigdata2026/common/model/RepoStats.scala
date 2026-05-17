@@ -10,8 +10,6 @@ final case class RepoStats(
   pushWeight:       Long,
   activityCount:    Long,
   contributorCount: Long,
-  firstSeen:        Long,
-  lastSeen:         Long,
 )
 
 object RepoStats:
