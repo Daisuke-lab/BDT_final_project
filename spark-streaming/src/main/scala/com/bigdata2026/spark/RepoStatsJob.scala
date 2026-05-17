@@ -314,6 +314,11 @@ object RepoStatsJob {
       sys.env.getOrElse("HBASE_ZOOKEEPER_QUORUM", "localhost"))
     conf.set("hbase.zookeeper.property.clientPort",
       sys.env.getOrElse("HBASE_ZOOKEEPER_PORT", "2182"))
+    // Increase session timeout to prevent connection drops during long writes
+    conf.set("zookeeper.session.timeout", "180000")       // 3 minutes
+    conf.set("zookeeper.recovery.retry", "3")
+    conf.set("hbase.rpc.timeout", "60000")                // 1 minute per RPC
+    conf.set("hbase.client.operation.timeout", "120000")  // 2 minutes for operations
     val conn = ConnectionFactory.createConnection(conf)
     try f(conn)
     finally conn.close()
