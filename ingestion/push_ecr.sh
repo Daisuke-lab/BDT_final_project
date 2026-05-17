@@ -69,7 +69,13 @@ fi
 echo "    JAR ready: $JAR"
 echo ""
 
-# ── 3. Build Docker image ─────────────────────────────────────────────────────
+# ── 3. Authenticate Docker to ECR ────────────────────────────────────────────
+echo "==> Logging in to ECR..."
+aws ecr get-login-password --region "$AWS_REGION" \
+  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+echo ""
+
+# ── 4. Build Docker image ─────────────────────────────────────────────────────
 # Build for linux/amd64 explicitly — Kubernetes nodes are x86_64 even on Apple Silicon Macs
 echo "==> Building Docker image (linux/amd64): $FULL_IMAGE ..."
 GIT_SHA=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo "local")
@@ -82,16 +88,7 @@ docker buildx build \
   "$ROOT"
 echo ""
 
-# ── 4. Authenticate Docker to ECR ────────────────────────────────────────────
-echo "==> Logging in to ECR..."
-aws ecr get-login-password --region "$AWS_REGION" \
-  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-echo ""
-
-# ── 5. Push image ─────────────────────────────────────────────────────────────
-# Image was already pushed by `docker buildx build --push` above.
-GIT_SHA=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo "")
-echo ""
+# ── 5. Done ───────────────────────────────────────────────────────────────────
 
 echo "============================================="
 echo "  Done!"
