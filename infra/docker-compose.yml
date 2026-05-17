@@ -1,3 +1,7 @@
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
+
 services:
   # ── Infrastructure ────────────────────────────────────────────────────────
   zookeeper:
@@ -19,8 +23,54 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     ports: ["29092:29092"]   # host access on localhost:29092
 
+  # ── HDFS (Part 5 — static reference data storage) ────────────────────────
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    hostname: namenode
+    environment:
+      CLUSTER_NAME: bigdata-cluster
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_replication: "1"
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    ports:
+      - "9870:9870"  # HDFS NameNode UI  →  http://localhost:9870
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9870/"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    depends_on: [namenode]
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_replication: "1"
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+
+  hdfs-init:
+    image: bde2020/hadoop-base:2.0.0-hadoop3.2.1-java8
+    depends_on: [namenode, datanode]
+    volumes:
+      - ../data:/data:ro
+      - ./hdfs-init.sh:/hdfs-init.sh:ro
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      SERVICE_PRECONDITION: "namenode:9870"
+    command: /hdfs-init.sh
+    restart: "no"
+
   hbase:
     image: harisekhon/hbase:2.1
+    hostname: hbase-local
+    networks:
+      default:
+        aliases:
+          - hbase-local  # lets other containers resolve 'hbase-local' → this container
     environment:
       HBASE_CONF_hbase_rootdir: file:///hbase-data
     ports:
@@ -29,6 +79,12 @@ services:
       - "16010:16010" # HBase Master UI  →  http://localhost:16010
       - "16020:16020"
       - "16030:16030"
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -tnlp 2>/dev/null | grep -q ':16020'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
 
   # ── Application ───────────────────────────────────────────────────────────
   ingestion:
@@ -46,20 +102,39 @@ services:
       # KAFKA_SASL_PASSWORD: msk_iot_online_secret
 
   streaming:
-    image: localhost/streaming:latest
-    depends_on: [kafka, hbase]
+    image: localhost/spark-streaming:latest
+    depends_on:
+      kafka:
+        condition: service_started
+      namenode:
+        condition: service_healthy
+      datanode:
+        condition: service_started
+      hbase:
+        condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: github-events
+      KAFKA_GROUP_ID: github-streaming
       HBASE_ZOOKEEPER_QUORUM: hbase
       HBASE_ZOOKEEPER_PORT: "2181"
+      HDFS_NAMENODE_URL: hdfs://namenode:9000
+      # ── MSK SASL (leave unset for local Kafka) ──────────────────────────────
+      # KAFKA_SECURITY_PROTOCOL: SASL_SSL
+      # KAFKA_SASL_MECHANISM: SCRAM-SHA-512
+      # KAFKA_SASL_USERNAME: msk_iot_online_key
+      # KAFKA_SASL_PASSWORD: msk_iot_online_secret
 
   backend:
     image: localhost/visualization-backend:latest
-    depends_on: [hbase]
+    depends_on:
+      hbase:
+        condition: service_healthy
     ports: ["8080:8080"]
     environment:
       HBASE_ZOOKEEPER_QUORUM: hbase
       HBASE_ZOOKEEPER_PORT: "2181"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:9876"
 
   frontend:
     image: localhost/visualization-frontend:latest

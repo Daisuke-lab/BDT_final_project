@@ -1,36 +1,24 @@
-# BigData2026 — Final Project
+```
+  ██████╗ ██╗ ██████╗     ██████╗  █████╗ ████████╗ █████╗
+  ██╔══██╗██║██╔════╝     ██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗
+  ██████╔╝██║██║  ███╗    ██║  ██║███████║   ██║   ███████║
+  ██╔══██╗██║██║   ██║    ██║  ██║██╔══██║   ██║   ██╔══██║
+  ██████╔╝██║╚██████╔╝    ██████╔╝██║  ██║   ██║   ██║  ██║
+  ╚═════╝ ╚═╝ ╚═════╝     ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
+
+  GitHub Pulse — Real-time Repository Analytics
+  Kafka · Spark Streaming · HBase
+```
+<img width="1301" height="995" alt="image" src="https://github.com/user-attachments/assets/b046367d-ae97-48b3-aaf9-e224e815bd3e" />
 
 ## Requirements
+
 - JDK 11+
 - Docker
-- sbt *(recommended)* — `brew install sbt` → https://formulae.brew.sh/formula/sbt
+- GitHub personal access token
 
-> If sbt is not installed globally, use `./sbt` instead (self-bootstrapping wrapper — downloads the launcher on first run).
-
-## Run locally (sbt)
-
-Start Kafka only (no other Docker services), then run each module via sbt:
+## Run locally
 
 ```bash
-bash infra/dev.sh          # spin up Kafka + Zookeeper only. Use case: to quickly test ingestion/stream without having to run ./infra/build-all.sh
-sbt ingestion/run          # GitHub event producer → Kafka
-sbt streaming/run          # Spark Structured Streaming consumer ← Kafka
-sbt vizBackend/run
-sbt vizFrontend/fastLinkJS
-```
-
-## Build & deploy (Docker)
-
-```bash
-# Build all images
-bash infra/build-all.sh
-
-# Spin up the full cluster
-bash infra/up.sh
-
-# Or build one service at a time
-bash infra/ingestion/build.sh
-bash infra/streaming/build.sh
-bash infra/visualization/backend/build.sh
-bash infra/visualization/frontend/build.sh
+GITHUB_TOKEN=<your_token> bash infra/dev.sh
 ```
