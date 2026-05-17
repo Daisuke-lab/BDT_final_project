@@ -9,7 +9,9 @@
   GitHub Pulse — Real-time Repository Analytics
   Kafka · Spark Streaming · HBase
 ```
-<img width="1301" height="995" alt="image" src="https://github.com/user-attachments/assets/b046367d-ae97-48b3-aaf9-e224e815bd3e" />
+<img width="1278" height="972" alt="image" src="https://github.com/user-attachments/assets/ab9a48fc-1afb-41fa-8b90-d8b08001c64a" />
+
+<img width="1276" height="499" alt="image" src="https://github.com/user-attachments/assets/5a6d4992-5bc3-4efc-a5f2-edff1a4d13db" />
 
 ## Requirements
 
