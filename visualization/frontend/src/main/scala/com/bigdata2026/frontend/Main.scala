@@ -1,10 +1,10 @@
 package com.bigdata2026.frontend
 
 import com.bigdata2026.common.http.BackendApiUrl
-import com.bigdata2026.common.model.{ActorStats, LanguageStats, RepoStats}
+import com.bigdata2026.common.model.{ActorStats, LanguageStats, NewRepoWindow, PushSpeedWindow, RepoStats}
 import com.bigdata2026.common.ws.ServerMsg
 import com.bigdata2026.frontend.view.Components.*
-import com.bigdata2026.frontend.view.{ContributorView, RepoStatsView}
+import com.bigdata2026.frontend.view.{ContributorView, RepoStatsView, WindowedStatsView}
 import tyrian.*
 import tyrian.Html.*
 import tyrian.websocket.{KeepAliveSettings, WebSocket, WebSocketConnect, WebSocketEvent}
@@ -48,16 +48,18 @@ enum RepoSortKey:
 // ── State ─────────────────────────────────────────────────────────────────────
 
 final case class State(
-  repoStats:     List[RepoStats],
-  languageStats: List[LanguageStats],
-  actorStats:    List[ActorStats],
-  repoSortKey:   RepoSortKey,
-  webSocket:     WebSocketStatus,
-  error:         Option[String],
+  repoStats:        List[RepoStats],
+  languageStats:    List[LanguageStats],
+  actorStats:       List[ActorStats],
+  newRepoWindows:   List[NewRepoWindow],
+  pushSpeedWindows: List[PushSpeedWindow],
+  repoSortKey:      RepoSortKey,
+  webSocket:        WebSocketStatus,
+  error:            Option[String],
 )
 
 object State:
-  val initial: State = State(Nil, Nil, Nil, RepoSortKey.Activity, WebSocketStatus.Disconnected, None)
+  val initial: State = State(Nil, Nil, Nil, Nil, Nil, RepoSortKey.Activity, WebSocketStatus.Disconnected, None)
 
 // ── Messages ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +77,10 @@ enum Msg:
   case LangStatsLoaded(langs: List[LanguageStats])
   case ActorStatsLoaded(actors: List[ActorStats])
   case ActorStatsUpdated(actors: List[ActorStats])
+  case NewRepoWindowsLoaded(windows: List[NewRepoWindow])
+  case NewRepoWindowAdded(window: NewRepoWindow)
+  case PushSpeedLoaded(windows: List[PushSpeedWindow])
+  case PushSpeedWindowAdded(window: PushSpeedWindow)
   case SelectRepoSort(key: RepoSortKey)
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -99,12 +105,16 @@ object Main extends TyrianZIOApp[Msg, State]:
     case Msg.WsConnected               => state.copy(webSocket = state.webSocket.toConnected, error = None) -> Cmd.None
     case Msg.WsDisconnected(_)         => state.copy(webSocket = WebSocketStatus.Disconnected) -> Cmd.None
     case Msg.WsError(e)                => state.copy(webSocket = WebSocketStatus.Disconnected, error = Some(e)) -> Cmd.None
-    case Msg.RepoStatsLoaded(repos)    => state.copy(repoStats = repos, error = None) -> Cmd.None
-    case Msg.RepoStatsUpdated(repos)   => state.copy(repoStats = repos) -> Cmd.None
-    case Msg.LangStatsLoaded(langs)    => state.copy(languageStats = langs) -> Cmd.None
-    case Msg.ActorStatsLoaded(actors)  => state.copy(actorStats = actors) -> Cmd.None
-    case Msg.ActorStatsUpdated(actors) => state.copy(actorStats = actors) -> Cmd.None
-    case Msg.SelectRepoSort(key)       => state.copy(repoSortKey = key) -> Cmd.None
+    case Msg.RepoStatsLoaded(repos)       => state.copy(repoStats = repos, error = None) -> Cmd.None
+    case Msg.RepoStatsUpdated(repos)      => state.copy(repoStats = repos) -> Cmd.None
+    case Msg.LangStatsLoaded(langs)       => state.copy(languageStats = langs) -> Cmd.None
+    case Msg.ActorStatsLoaded(actors)     => state.copy(actorStats = actors) -> Cmd.None
+    case Msg.ActorStatsUpdated(actors)    => state.copy(actorStats = actors) -> Cmd.None
+    case Msg.NewRepoWindowsLoaded(ws)     => state.copy(newRepoWindows = ws.sortBy(_.windowStart).takeRight(24)) -> Cmd.None
+    case Msg.NewRepoWindowAdded(w)        => state.copy(newRepoWindows = (state.newRepoWindows :+ w).takeRight(24)) -> Cmd.None
+    case Msg.PushSpeedLoaded(ws)          => state.copy(pushSpeedWindows = ws.sortBy(_.windowStart).takeRight(24)) -> Cmd.None
+    case Msg.PushSpeedWindowAdded(w)      => state.copy(pushSpeedWindows = (state.pushSpeedWindows :+ w).takeRight(24)) -> Cmd.None
+    case Msg.SelectRepoSort(key)          => state.copy(repoSortKey = key) -> Cmd.None
     case Msg.WsReceive(data)           =>
       data.fromJson[ServerMsg] match
         case Right(ServerMsg.RepoStatsSnapshot(rs))     => state -> Cmd.Emit(Msg.RepoStatsLoaded(rs))
@@ -112,6 +122,10 @@ object Main extends TyrianZIOApp[Msg, State]:
         case Right(ServerMsg.LanguageStatsSnapshot(ls)) => state -> Cmd.Emit(Msg.LangStatsLoaded(ls))
         case Right(ServerMsg.ActorStatsSnapshot(a))     => state -> Cmd.Emit(Msg.ActorStatsLoaded(a))
         case Right(ServerMsg.ActorStatsUpdated(a))      => state -> Cmd.Emit(Msg.ActorStatsUpdated(a))
+        case Right(ServerMsg.Snapshot(ws))              => state -> Cmd.Emit(Msg.NewRepoWindowsLoaded(ws))
+        case Right(ServerMsg.NewWindow(w))              => state -> Cmd.Emit(Msg.NewRepoWindowAdded(w))
+        case Right(ServerMsg.PushSpeedSnapshot(ws))     => state -> Cmd.Emit(Msg.PushSpeedLoaded(ws))
+        case Right(ServerMsg.PushSpeedNewWindow(w))     => state -> Cmd.Emit(Msg.PushSpeedWindowAdded(w))
         case Right(_)                                    => state -> Cmd.None
         case Left(_)                                     => state -> Cmd.None
 
@@ -126,6 +140,10 @@ object Main extends TyrianZIOApp[Msg, State]:
         div(cls := "grid grid-cols-1 lg:grid-cols-2 gap-6")(
           RepoStatsView.render(state.repoStats, state.repoSortKey),
           ContributorView.render(state.actorStats),
+        ),
+        div(cls := "grid grid-cols-1 lg:grid-cols-2 gap-6")(
+          WindowedStatsView.renderNewRepos(state.newRepoWindows),
+          WindowedStatsView.renderPushSpeed(state.pushSpeedWindows),
         ),
         if state.languageStats.nonEmpty then languagePanel(state.languageStats) else div()(),
       )

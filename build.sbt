@@ -54,8 +54,6 @@ logo :=
 usefulTasks := Seq(
   UsefulTask("ingestion/run",      "GitHub event producer → production Kafka").alias("p1"),
   UsefulTask("p1dev",              "GitHub event producer → local Kafka"),
-  UsefulTask("streaming/run",      "ZIO streaming debug consumer → production Kafka").alias("p2"),
-  UsefulTask("p2dev",              "ZIO streaming debug consumer → local Kafka"),
   UsefulTask("sparkStreaming/run", "Spark Structured Streaming → HBase").alias("p3"),
   UsefulTask("vizBackend/reStart", "WebSocket backend on :8080").alias("bs"),
   UsefulTask("vizFrontend/dev",    "Frontend dev server on :9876").alias("fdev"),
@@ -114,27 +112,6 @@ lazy val ingestion = project
       "org.apache.kafka"    %  "kafka-clients"    % kafkaVersion,
       "org.slf4j"           %  "slf4j-simple"     % "2.0.9",
       "com.fasterxml.jackson.core" % "jackson-databind" % "2.15.2"
-    )
-  )
-  .settings(assemblySettings *)
-
-// ── Part 2/3/5 — streaming (Scala 2.13 + ZIO + zio-kafka) ───────────────────
-lazy val streaming = project
-  .in(file("streaming"))
-  .dependsOn(schema)
-  .settings(
-    name                := "streaming",
-    scalaVersion        := scala213,
-    run / fork          := true,
-    run / envVars       := localEnv,
-    Compile / mainClass := Some("com.bigdata2026.streaming.Main"),
-    libraryDependencies ++= Seq(
-      "dev.zio"          %% "zio"                 % zioVersion,
-      "dev.zio"          %% "zio-kafka"           % zioKafkaVersion,
-      "dev.zio"          %% "zio-json"            % "0.7.36",
-      "dev.zio"          %% "zio-logging"         % "2.4.0",
-      "dev.zio"          %% "zio-logging-slf4j2"  % "2.4.0",
-      "ch.qos.logback"    % "logback-classic"     % "1.5.16"
     )
   )
   .settings(assemblySettings *)
@@ -253,8 +230,6 @@ commands += Command.command("p1dev") { state =>
   val envStr = env.map { case (k, v) => s""""$k" -> "$v"""" }.mkString(", ")
   s"set ingestion/run/envVars := Map($envStr)" :: "ingestion/run" :: state
 }
-addCommandAlias("p2",    "streaming/run")
-addCommandAlias("p2dev", ";set streaming/run/envVars := Map.empty[String,String];streaming/run")
 addCommandAlias("p3", "sparkStreaming/run")
 addCommandAlias("bs", "vizBackend/reStart")
 addCommandAlias("bx", "vizBackend/reStop")
@@ -263,7 +238,7 @@ addCommandAlias("fdst", "vizFrontend/publishDist")
 
 lazy val root = project
   .in(file("."))
-  .aggregate(schema, ingestion, streaming, sparkStreaming, vizCommonJVM, vizCommonJS, vizBackend, vizFrontend)
+  .aggregate(schema, ingestion, sparkStreaming, vizCommonJVM, vizCommonJS, vizBackend, vizFrontend)
   .settings(
     name           := "bigdata2026-final",
     publish / skip := true
