@@ -17,4 +17,5 @@ test-scripts/
 # local secrets — never commit
 .env.local
 ingestion/.env.local
+run_local.sh
 infra/local.env
