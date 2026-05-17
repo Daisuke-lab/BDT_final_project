@@ -3,6 +3,7 @@
 services:
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    platform: linux/amd64
     hostname: namenode
     environment:
       CLUSTER_NAME: bigdata-cluster
@@ -16,6 +17,7 @@ services:
 
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    platform: linux/amd64
     depends_on: [namenode]
     environment:
       CORE_CONF_fs_defaultFS: hdfs://namenode:9000
@@ -25,6 +27,7 @@ services:
 
   hdfs-init:
     image: bde2020/hadoop-base:2.0.0-hadoop3.2.1-java8
+    platform: linux/amd64
     depends_on:
       namenode:
         condition: service_healthy
@@ -40,6 +43,7 @@ services:
 
   hbase:
     image: harisekhon/hbase:2.1
+    platform: linux/amd64
     hostname: hbase-local
     networks:
       default:
