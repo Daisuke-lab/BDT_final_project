@@ -16,6 +16,7 @@ import java.net.URL;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -64,8 +65,22 @@ public final class Main {
 
     private static final String GITHUB_EVENTS_URL =
         "https://api.github.com/events?per_page=100";
+    private static final String GITHUB_REPO_URL =
+        "https://api.github.com/repos/";
+    private static final int MAX_PAGES = 10; // GitHub Events API returns at most 10 pages
+    private static final int LANG_CACHE_MAX = 5_000;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    // LRU cache: repo full-name → language ("" when GitHub returns null)
+    @SuppressWarnings("serial")
+    private static final Map<String, String> LANG_CACHE =
+        new LinkedHashMap<>(LANG_CACHE_MAX, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, String> e) {
+                return size() > LANG_CACHE_MAX;
+            }
+        };
 
     // Trend weight per event type (used by downstream Spark SQL)
     private static final Map<String, Integer> EVENT_WEIGHTS = Map.ofEntries(
@@ -163,55 +178,130 @@ public final class Main {
     }
 
     // ── GitHub API ────────────────────────────────────────────────────────────
+    /** Fetches all available pages of the GitHub public Events API (up to MAX_PAGES). */
     private static List<JsonNode> fetchEvents() {
         List<JsonNode> result = new ArrayList<>();
+        String nextUrl = GITHUB_EVENTS_URL;
+        int page = 0;
+
+        while (nextUrl != null && page < MAX_PAGES) {
+            page++;
+            HttpURLConnection conn = null;
+            try {
+                conn = openGitHubConnection(nextUrl);
+                int    status    = conn.getResponseCode();
+                String remaining = conn.getHeaderField("X-RateLimit-Remaining");
+
+                if (status == 200) {
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(conn.getInputStream()))) {
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) sb.append(line);
+                        JsonNode arr = MAPPER.readTree(sb.toString());
+                        if (arr.isArray()) arr.forEach(result::add);
+                    }
+                    System.out.printf("[Ingestion] Page %d — fetched %d events cumulative, rate-limit remaining: %s%n",
+                        page, result.size(), remaining != null ? remaining : "?");
+                    nextUrl = parseNextLink(conn.getHeaderField("Link"));
+
+                } else if (status == 403) {
+                    System.out.printf("[Ingestion] Rate limited (403) on page %d. Remaining: %s. Sleeping 60s...%n",
+                        page, remaining);
+                    Thread.sleep(60_000);
+                    break;
+
+                } else if (status == 304) {
+                    System.out.println("[Ingestion] 304 Not Modified — no new events.");
+                    break;
+
+                } else {
+                    System.err.println("[Ingestion] GitHub API error: HTTP " + status + " on page " + page);
+                    break;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (IOException e) {
+                System.err.println("[Ingestion] Network error on page " + page + ": " + e.getMessage());
+                break;
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Looks up the primary language of a repo via the GitHub Repos API.
+     * Results are cached in LANG_CACHE (LRU, capped at LANG_CACHE_MAX entries)
+     * to avoid burning rate-limit budget on repeated lookups for the same repo.
+     */
+    private static String fetchLanguage(String repoName) {
+        if (repoName == null || repoName.isEmpty()) return "";
+
+        // Return cached value (including "" which means GitHub returned null)
+        if (LANG_CACHE.containsKey(repoName)) return LANG_CACHE.get(repoName);
+
         HttpURLConnection conn = null;
         try {
-            URL url = new URL(GITHUB_EVENTS_URL);
-            conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(15_000);
-            conn.setReadTimeout(15_000);
-            conn.setRequestProperty("Accept", "application/vnd.github+json");
-            conn.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-            conn.setRequestProperty("User-Agent", "CS523-BDT-Final/1.0");
-            if (!GITHUB_TOKEN.isEmpty())
-                conn.setRequestProperty("Authorization", "Bearer " + GITHUB_TOKEN);
-
-            int    status    = conn.getResponseCode();
-            String remaining = conn.getHeaderField("X-RateLimit-Remaining");
-
+            conn = openGitHubConnection(GITHUB_REPO_URL + repoName);
+            int status = conn.getResponseCode();
             if (status == 200) {
                 try (BufferedReader reader = new BufferedReader(
                         new InputStreamReader(conn.getInputStream()))) {
                     StringBuilder sb = new StringBuilder();
                     String line;
                     while ((line = reader.readLine()) != null) sb.append(line);
-                    JsonNode arr = MAPPER.readTree(sb.toString());
-                    if (arr.isArray()) arr.forEach(result::add);
+                    JsonNode repo = MAPPER.readTree(sb.toString());
+                    String lang = repo.path("language").asText("");
+                    LANG_CACHE.put(repoName, lang);
+                    return lang;
                 }
-                System.out.printf("[Ingestion] Fetched %d events — rate-limit remaining: %s%n",
-                    result.size(), remaining != null ? remaining : "?");
-
             } else if (status == 403) {
-                System.out.printf("[Ingestion] Rate limited (403). Remaining: %s. Sleeping 60s...%n", remaining);
-                Thread.sleep(60_000);
-
-            } else if (status == 304) {
-                System.out.println("[Ingestion] 304 Not Modified — no new events.");
-
+                System.out.println("[Ingestion] Rate limited fetching language for " + repoName + ", skipping.");
             } else {
-                System.err.println("[Ingestion] GitHub API error: HTTP " + status);
+                // 404, 451 (blocked), etc. — cache as empty to avoid retrying
+                LANG_CACHE.put(repoName, "");
             }
-
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
         } catch (IOException e) {
-            System.err.println("[Ingestion] Network error: " + e.getMessage());
+            System.err.println("[Ingestion] Language lookup error for " + repoName + ": " + e.getMessage());
         } finally {
             if (conn != null) conn.disconnect();
         }
-        return result;
+        return "";
+    }
+
+    /** Opens an authenticated GitHub API connection to the given URL. */
+    private static HttpURLConnection openGitHubConnection(String urlStr) throws IOException {
+        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(15_000);
+        conn.setReadTimeout(15_000);
+        conn.setRequestProperty("Accept", "application/vnd.github+json");
+        conn.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
+        conn.setRequestProperty("User-Agent", "CS523-BDT-Final/1.0");
+        if (!GITHUB_TOKEN.isEmpty())
+            conn.setRequestProperty("Authorization", "Bearer " + GITHUB_TOKEN);
+        return conn;
+    }
+
+    /**
+     * Parses the GitHub Link response header and returns the URL for rel="next", or null.
+     * Example header: {@code <https://api.github.com/events?page=2>; rel="next", ...}
+     */
+    private static String parseNextLink(String linkHeader) {
+        if (linkHeader == null || linkHeader.isEmpty()) return null;
+        for (String part : linkHeader.split(",")) {
+            String[] segments = part.trim().split(";");
+            if (segments.length == 2
+                    && segments[1].trim().equals("rel=\"next\"")) {
+                String url = segments[0].trim();
+                if (url.startsWith("<") && url.endsWith(">"))
+                    return url.substring(1, url.length() - 1);
+            }
+        }
+        return null;
     }
 
     // ── Event enrichment ──────────────────────────────────────────────────────
@@ -234,6 +324,10 @@ public final class Main {
         out.put("ingest_time",  Instant.now().toString());
         out.put("trend_weight", EVENT_WEIGHTS.getOrDefault(eventType, 0));
 
+        // Language — fetched from /repos/{name} with in-memory LRU cache
+        String repoName = repo.path("name").asText("");
+        out.put("language", fetchLanguage(repoName));
+
         // Type-specific fields (defaults)
         out.put("push_size",    0);
         out.put("push_ref",     "");
@@ -242,7 +336,6 @@ public final class Main {
         out.put("release_tag",  "");
         out.put("pr_action",    "");
         out.put("issue_action", "");
-        out.put("language",     "");
 
         switch (eventType) {
             case "PushEvent":

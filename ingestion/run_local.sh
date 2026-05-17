@@ -22,7 +22,6 @@ SBT="$ROOT/sbt"
 export KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-localhost:29092}"
 export KAFKA_TOPIC="${KAFKA_TOPIC:-github-events}"
 export POLL_INTERVAL="${POLL_INTERVAL:-10}"
-
 # ── Load a local secrets file if it exists (never commit this file) ───────────
 # Create ingestion/.env.local with your real values, e.g.:
 #   GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
