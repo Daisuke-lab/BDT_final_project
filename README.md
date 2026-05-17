@@ -15,9 +15,10 @@
 
 - JDK 11+
 - Docker
+- GitHub personal access token
 
-## Run
+## Run locally
 
 ```bash
-bash infra/build-all.sh && bash infra/up.sh
+GITHUB_TOKEN=<your_token> bash infra/dev.sh
 ```

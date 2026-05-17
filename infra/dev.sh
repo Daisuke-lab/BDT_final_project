@@ -7,14 +7,15 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 ENV_FILE="$DIR/local.env"
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "ERROR: $ENV_FILE not found. Copy infra/local.env.example and fill in GITHUB_TOKEN." >&2
+if [[ -f "$ENV_FILE" ]]; then
+  set -o allexport
+  source "$ENV_FILE"
+  set +o allexport
+elif [[ -z "${GITHUB_TOKEN:-}" ]]; then
+  echo "ERROR: GITHUB_TOKEN is not set. Either create infra/local.env or pass it inline:" >&2
+  echo "  GITHUB_TOKEN=<token> bash infra/dev.sh" >&2
   exit 1
 fi
-
-set -o allexport
-source "$ENV_FILE"
-set +o allexport
 
 echo "==> Building all images..."
 bash "$DIR/build-all.sh"
