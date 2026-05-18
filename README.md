@@ -19,28 +19,28 @@
 flowchart LR
     GH(["GitHub API"])
 
-    subgraph Ingestion
-        ING["ingestion\n(Scala)"]
+    subgraph Ingestion["Ingestion — Daisuke"]
+        ING["ingestion\n(Java)"]
     end
 
-    subgraph Messaging
+    subgraph Messaging["Messaging — Daisuke"]
         ZK["Zookeeper"]
         KF["Kafka\ntopic: github-events"]
         ZK --> KF
     end
 
-    subgraph Processing
+    subgraph Processing["Processing — shared"]
         SS["Spark Streaming\n(Scala)"]
     end
 
-    subgraph Storage
+    subgraph Storage["Storage — shared"]
         HB[("HBase")]
         NN[("HDFS\nNameNode")]
         DN[("HDFS\nDataNode")]
         NN --- DN
     end
 
-    subgraph Visualization
+    subgraph Visualization["Visualization — Bao Khanh Dinh"]
         BE["Backend\n(zio-http :8080)"]
         FE["Frontend\n(:3000)"]
         BE -->|"WebSocket"| FE
