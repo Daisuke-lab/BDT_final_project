@@ -13,6 +13,47 @@
 
 <img width="1276" height="499" alt="image" src="https://github.com/user-attachments/assets/5a6d4992-5bc3-4efc-a5f2-edff1a4d13db" />
 
+## Data Flow
+
+```mermaid
+flowchart LR
+    GH(["GitHub API"])
+
+    subgraph Ingestion
+        ING["ingestion\n(Scala)"]
+    end
+
+    subgraph Messaging
+        ZK["Zookeeper"]
+        KF["Kafka\ntopic: github-events"]
+        ZK --> KF
+    end
+
+    subgraph Processing
+        SS["Spark Streaming\n(Scala)"]
+    end
+
+    subgraph Storage
+        HB[("HBase")]
+        NN[("HDFS\nNameNode")]
+        DN[("HDFS\nDataNode")]
+        NN --- DN
+    end
+
+    subgraph Visualization
+        BE["Backend\n(zio-http :8080)"]
+        FE["Frontend\n(:3000)"]
+        BE -->|"WebSocket"| FE
+    end
+
+    GH -->|"poll every 10s"| ING
+    ING -->|"produce"| KF
+    KF -->|"consume"| SS
+    SS -->|"write analytics"| HB
+    SS -->|"write raw events"| NN
+    HB -->|"read"| BE
+```
+
 ## Requirements
 
 - JDK 11+
