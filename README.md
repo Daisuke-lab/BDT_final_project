@@ -50,7 +50,7 @@ flowchart LR
     ING -->|"produce"| KF
     KF -->|"consume"| SS
     SS -->|"write analytics"| HB
-    SS -->|"write raw events"| NN
+    SS -->|"read/write reference data"| NN
     HB -->|"read"| BE
 ```
 
