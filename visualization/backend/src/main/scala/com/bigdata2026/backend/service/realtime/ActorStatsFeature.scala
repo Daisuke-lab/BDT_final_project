@@ -14,7 +14,7 @@ final class ActorStatsFeature extends Feature:
   def snapshot: Task[ServerMsg] =
     ZIO.attemptBlocking {
       withTable { table =>
-        val scanner = table.getScanner(new Scan())
+        val scanner = table.getScanner(new Scan().setLimit(ActorStatsFeature.ScanLimit))
         try parseRows(scanner)
         finally scanner.close()
       }
@@ -27,7 +27,7 @@ final class ActorStatsFeature extends Feature:
         .mapAccumZIO(initSince) { (watermark, _) =>
           ZIO.attemptBlocking {
             withTable { table =>
-              val scanner = table.getScanner(new Scan())
+              val scanner = table.getScanner(new Scan().setLimit(ActorStatsFeature.ScanLimit))
               val actors  = try parseRows(scanner) finally scanner.close()
               val newMax  = actors.map(_.activityCount).maxOption.getOrElse(watermark)
               (newMax, if (newMax > watermark) actors else Nil)
@@ -43,7 +43,7 @@ final class ActorStatsFeature extends Feature:
   private def currentMaxActivity: Task[Long] =
     ZIO.attemptBlocking {
       withTable { table =>
-        val scanner = table.getScanner(new Scan())
+        val scanner = table.getScanner(new Scan().setLimit(ActorStatsFeature.ScanLimit))
         try parseRows(scanner).map(_.activityCount).maxOption.getOrElse(0L)
         finally scanner.close()
       }
@@ -62,6 +62,7 @@ final class ActorStatsFeature extends Feature:
         )
       }
       .toList
+      .sortBy(_.activityCount).reverse.take(50)
 
   private def withTable[A](f: org.apache.hadoop.hbase.client.Table => A): A =
     val conf = HBaseConfiguration.create()
@@ -76,3 +77,4 @@ final class ActorStatsFeature extends Feature:
 
 object ActorStatsFeature:
   val live: ULayer[ActorStatsFeature] = ZLayer.succeed(new ActorStatsFeature)
+  private[realtime] val ScanLimit = 2000
